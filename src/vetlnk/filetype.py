@@ -117,19 +117,35 @@ def probe_file(url: str, *, client: httpx.Client | None = None) -> FileInfo | No
         true_type = None
         risk_note = None
         if ambiguous or content_type not in ("text/html", "text/plain"):
-            range_resp = client.get(
+            # The Range header only *asks* the server to send ~256 bytes — a
+            # non-compliant or deliberately adversarial server can ignore it
+            # and stream its full body anyway. Streaming and capping the read
+            # ourselves (instead of client.get(), which would buffer whatever
+            # the server sends in full) means the ~256-byte cap is enforced
+            # client-side and actually holds regardless of server behavior.
+            chunk = b""
+            range_headers = None
+            with client.stream(
+                "GET",
                 url,
                 headers={"Range": f"bytes=0-{_RANGE_BYTES - 1}"},
                 follow_redirects=True,
-            )
-            if range_resp.status_code not in (200, 206) or not range_resp.content:
-                owns_client and client.close()
+            ) as range_resp:
+                if range_resp.status_code not in (200, 206):
+                    return None
+                range_headers = range_resp.headers
+                for piece in range_resp.iter_bytes():
+                    chunk += piece
+                    if len(chunk) >= _RANGE_BYTES:
+                        break
+            chunk = chunk[:_RANGE_BYTES]
+
+            if not chunk:
                 return None
-            chunk = range_resp.content[:_RANGE_BYTES]
             match = _match_signature(chunk)
             if match:
                 true_type, risk_note = match
-            headers = range_resp.headers
+            headers = range_headers
             if content_length is None and "content-length" in headers:
                 content_length = int(headers["content-length"])
 

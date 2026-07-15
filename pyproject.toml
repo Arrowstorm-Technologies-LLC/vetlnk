@@ -30,7 +30,10 @@ dependencies = [
 
 [project.optional-dependencies]
 vt = ["vt-py>=0.18"]
-detonate = ["docker>=7.1", "python-magic>=0.4.27", "yara-python>=4.5"]
+# Only the Docker SDK is needed on the host — python-magic/yara-python run
+# *inside* the analyzer container (installed there via its own Dockerfile),
+# never imported by vetlnk itself.
+detonate = ["docker>=7.1"]
 dev = [
     "pytest>=8.2",
     "pytest-mock>=3.14",
@@ -47,6 +50,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vetlnk"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/vetlnk", "tests", "README.md", "LICENSE"]
 
 [tool.ruff]
 line-length = 100

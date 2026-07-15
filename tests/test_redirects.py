@@ -10,6 +10,21 @@ def _patch_no_network(monkeypatch):
     monkeypatch.setattr(redirects, "lookup_asn", lambda ip: (None, None))
 
 
+class _PoisonBodyStream:
+    """A response body that fails the test the moment anything tries to read
+    it — used to prove redirect tracking never consumes the response body.
+    """
+
+    def __iter__(self):
+        raise AssertionError(
+            "response body was read during redirect tracking — it should only "
+            "ever be touched by filetype.py's own bounded HEAD/ranged-GET probe"
+        )
+
+    def close(self):
+        pass
+
+
 @respx.mock
 def test_follows_manual_redirect_chain(monkeypatch):
     _patch_no_network(monkeypatch)
@@ -53,6 +68,26 @@ def test_redirect_loop_is_detected_and_stopped(monkeypatch):
 
     assert hops[-1].error == "redirect loop detected"
     assert len(hops) <= redirects.MAX_HOPS + 1
+
+
+@respx.mock
+def test_response_body_is_never_read_during_redirect_tracking(monkeypatch):
+    _patch_no_network(monkeypatch)
+    respx.get("https://example.com/file.bin").mock(
+        return_value=httpx.Response(
+            200,
+            headers={"content-type": "application/octet-stream"},
+            stream=_PoisonBodyStream(),
+        )
+    )
+
+    with httpx.Client(follow_redirects=False) as client:
+        hops = redirects.follow_redirects("https://example.com/file.bin", client=client)
+
+    # Reaching here at all (no AssertionError from _PoisonBodyStream) is the
+    # proof: the hop was recorded from headers/status alone.
+    assert len(hops) == 1
+    assert hops[0].status_code == 200
 
 
 @respx.mock

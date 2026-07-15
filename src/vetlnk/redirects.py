@@ -139,8 +139,22 @@ def follow_redirects(url: str, client: httpx.Client | None = None) -> list[Hop]:
 
             start = time.perf_counter()
             try:
-                resp = client.get(current_url)
-                elapsed_ms = (time.perf_counter() - start) * 1000
+                # Streamed and never read: hop tracking only needs the status
+                # line and headers. Exiting the `with` block closes the
+                # connection without ever pulling the response body into
+                # memory — using client.get() here would silently download
+                # whatever the URL serves (including the target file itself
+                # on the final hop) on *every* scan, not just `-d` ones,
+                # which would make "no file download by default" false.
+                # filetype.py's later HEAD + short ranged GET is the only
+                # place a body is ever touched, and only ~256 bytes of it.
+                with client.stream("GET", current_url) as resp:
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+                    status_code = resp.status_code
+                    headers = dict(resp.headers)
+                    next_request_url = (
+                        str(resp.next_request.url) if resp.next_request else None
+                    )
             except httpx.HTTPError as exc:
                 hops.append(
                     Hop(
@@ -160,8 +174,8 @@ def follow_redirects(url: str, client: httpx.Client | None = None) -> list[Hop]:
 
             hop = Hop(
                 url=current_url,
-                status_code=resp.status_code,
-                headers=dict(resp.headers),
+                status_code=status_code,
+                headers=headers,
                 elapsed_ms=elapsed_ms,
                 ip=ip,
                 asn=asn,
@@ -170,10 +184,10 @@ def follow_redirects(url: str, client: httpx.Client | None = None) -> list[Hop]:
             )
             hops.append(hop)
 
-            if resp.status_code in REDIRECT_STATUS_CODES and "location" in resp.headers:
-                next_url = str(resp.next_request.url) if resp.next_request else None
+            if status_code in REDIRECT_STATUS_CODES and "location" in headers:
+                next_url = next_request_url
                 if not next_url:
-                    next_url = str(httpx.URL(current_url).join(resp.headers["location"]))
+                    next_url = str(httpx.URL(current_url).join(headers["location"]))
                 current_url = next_url
                 continue
 

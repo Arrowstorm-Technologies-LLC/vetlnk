@@ -1,5 +1,14 @@
 """Static-only analysis entrypoint run inside the network-isolated vetlnk-analyzer
 container. Reads a single file, never executes it, prints a JSON verdict.
+
+Auditable "no execution" invariant: the only two third-party calls that touch
+the sample's bytes are `magic.from_buffer` (libmagic — pattern-matches magic
+byte signatures, the same thing the `file` command does, never interprets or
+unpacks content) and `yara.compile`/`Rules.match` (YARA — pure byte-pattern
+scanning, not a code-execution engine). There is no archive extraction, no
+document/macro parsing, no subprocess/os.system/eval/exec anywhere in this
+file. If you're adding a new check here, keep it that way — don't reach for
+a library that "helpfully" unpacks or renders the sample to inspect it.
 """
 
 from __future__ import annotations

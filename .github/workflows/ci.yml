@@ -15,7 +15,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e ".[dev,vt]"
+        run: pip install -e ".[dev,vt,detonate]"
 
       - name: Lint (ruff)
         run: ruff check .

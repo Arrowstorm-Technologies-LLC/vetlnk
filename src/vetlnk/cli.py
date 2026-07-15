@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import signal
+
 import httpx
 import typer
 from rich.console import Console
@@ -13,6 +15,24 @@ from vetlnk.enhanced import run_enhanced_checks
 from vetlnk.models import ScanResult
 from vetlnk.risk import synthesize_risk
 from vetlnk.scanner import scan_url
+
+
+def _raise_keyboard_interrupt(signum, frame):
+    raise KeyboardInterrupt()
+
+
+# Plain `kill <pid>` sends SIGTERM, which — unlike Ctrl+C's SIGINT — Python
+# does *not* turn into a catchable exception by default, so the try/finally
+# cleanup around detonation (secure-deleting the downloaded sample, killing
+# and removing the analysis container) would silently be skipped. Converting
+# it to a KeyboardInterrupt makes an ordinary `kill` unwind through those
+# finally blocks the same way Ctrl+C already does. `kill -9` (SIGKILL) is
+# fundamentally uncatchable by any process — no signal handler can run for
+# it — so it isn't covered by this; the container's own baked-in wall-clock
+# timeout plus Docker's daemon-side auto-remove are what bound the damage
+# in that case instead. See detonate.py and the README's detonation
+# verification section.
+signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
 
 app = typer.Typer(
     name="vetlnk",
