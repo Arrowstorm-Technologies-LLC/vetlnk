@@ -18,8 +18,6 @@ jobs:
             name: vetlnk-linux-x86_64
           - os: macos-latest
             name: vetlnk-macos-arm64
-          - os: macos-13
-            name: vetlnk-macos-x86_64
           - os: windows-latest
             name: vetlnk-windows-amd64
     runs-on: ${{ matrix.os }}

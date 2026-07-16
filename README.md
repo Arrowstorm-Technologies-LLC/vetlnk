@@ -15,7 +15,7 @@ safely and clearly if it can't do that safely.
 ### Via [rack](https://github.com/Arrowstorm-Technologies-LLC/rack) (recommended)
 
 Each tagged release publishes standalone binaries for Linux, macOS
-(Apple Silicon and Intel), and Windows — built by
+(Apple Silicon), and Windows — built by
 [`.github/workflows/release.yml`](.github/workflows/release.yml), no Python
 needed on the target machine. `rack` itself is a single cross-platform
 binary too, so this works the same way in any terminal on any of the three:
@@ -33,8 +33,8 @@ and architecture, installs it (`~/.local/bin/vetlnk` on Linux/macOS,
 
 Grab the asset matching your platform from the [latest
 release](https://github.com/Arrowstorm-Technologies-LLC/vetlnk/releases/latest)
-(`vetlnk-linux-x86_64`, `vetlnk-macos-arm64`, `vetlnk-macos-x86_64`, or
-`vetlnk-windows-amd64.exe`), then:
+(`vetlnk-linux-x86_64`, `vetlnk-macos-arm64`, or `vetlnk-windows-amd64.exe`),
+then:
 
 ```bash
 chmod +x vetlnk-linux-x86_64   # or the macOS asset
