@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project and PyInstaller
+        run: |
+          pip install .
+          pip install pyinstaller
+
+      - name: Build standalone binary
+        run: pyinstaller --onefile --name vetlnk-linux-x86_64 --paths src src/vetlnk/__main__.py
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/vetlnk-linux-x86_64 \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
