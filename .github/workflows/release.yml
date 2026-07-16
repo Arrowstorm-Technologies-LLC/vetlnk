@@ -9,8 +9,20 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: vetlnk-linux-x86_64
+          - os: macos-latest
+            name: vetlnk-macos-arm64
+          - os: macos-13
+            name: vetlnk-macos-x86_64
+          - os: windows-latest
+            name: vetlnk-windows-amd64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,12 +36,30 @@ jobs:
           pip install pyinstaller
 
       - name: Build standalone binary
-        run: pyinstaller --onefile --name vetlnk-linux-x86_64 --paths src src/vetlnk/__main__.py
+        run: pyinstaller --onefile --name ${{ matrix.name }} --paths src src/vetlnk/__main__.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/${{ matrix.name }}
+            dist/${{ matrix.name }}.exe
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" dist/vetlnk-linux-x86_64 \
+          gh release create "${{ github.ref_name }}" dist/* \
             --title "${{ github.ref_name }}" \
             --generate-notes
