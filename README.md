@@ -10,11 +10,41 @@ safely and clearly if it can't do that safely.
 
 ## Install
 
+`vetlnk` isn't published on PyPI — install it from a GitHub release instead.
+
+### Via [rack](https://github.com/Arrowstorm-Technologies-LLC/rack) (recommended)
+
+Each tagged release publishes a standalone Linux binary (`vetlnk-linux-x86_64`,
+built by [`.github/workflows/release.yml`](.github/workflows/release.yml) —
+no Python needed on the target machine). If you use `rack` to manage
+binaries:
+
 ```bash
-pipx install vetlnk
+rack vetlnk Arrowstorm-Technologies-LLC/vetlnk
 ```
 
-(Or `pip install vetlnk` inside a virtualenv if you don't use pipx.)
+This resolves the latest release, downloads the matching asset, installs it
+to `~/.local/bin/vetlnk`, and registers it so `rack update` picks up future
+releases automatically.
+
+### Manual binary download
+
+Grab `vetlnk-linux-x86_64` from the [latest
+release](https://github.com/Arrowstorm-Technologies-LLC/vetlnk/releases/latest),
+then:
+
+```bash
+chmod +x vetlnk-linux-x86_64
+mv vetlnk-linux-x86_64 ~/.local/bin/vetlnk
+```
+
+### From source
+
+```bash
+git clone https://github.com/Arrowstorm-Technologies-LLC/vetlnk.git
+cd vetlnk
+pip install -e .
+```
 
 ## Quickstart — no signup needed
 
