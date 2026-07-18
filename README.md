@@ -33,11 +33,11 @@ and architecture, installs it (`~/.local/bin/vetlnk` on Linux/macOS,
 
 Grab the asset matching your platform from the [latest
 release](https://github.com/Arrowstorm-Technologies-LLC/vetlnk/releases/latest)
-(`vetlnk-linux-x86_64`, `vetlnk-macos-arm64`, or `vetlnk-windows-amd64.exe`),
-then:
+(`vetlnk-linux-x86_64`, `vetlnk-linux-arm64`, `vetlnk-macos-arm64`, or
+`vetlnk-windows-amd64.exe`), then:
 
 ```bash
-chmod +x vetlnk-linux-x86_64   # or the macOS asset
+chmod +x vetlnk-linux-x86_64   # or the linux-arm64 / macOS asset
 mv vetlnk-linux-x86_64 ~/.local/bin/vetlnk
 ```
 
