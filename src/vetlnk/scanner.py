@@ -38,10 +38,29 @@ def _cached_dnsbl_check(domain: str) -> list[DnsblResult]:
     return results
 
 
+def _normalize_url(url: str) -> tuple[str, str | None]:
+    """Default a bare host/path (no `scheme://`) to https://.
+
+    httpx treats a scheme-less string like "example.com" as a relative path
+    with no host, so it never actually hits the network — every downstream
+    check (WHOIS, DNSBL, TLS, heuristics, file probe) silently no-ops instead
+    of erroring loudly. Browsers paper over this same gap by assuming https,
+    so we do the same rather than requiring callers to type the scheme every
+    invocation. Only a fully scheme-less input is touched; an explicit
+    non-http(s) scheme (e.g. `ftp://`) is left alone rather than mangled.
+    """
+    if "://" not in url:
+        return f"https://{url}", f"no scheme in '{url}' — assuming https://"
+    return url, None
+
+
 def scan_url(
     url: str, *, client: httpx.Client | None = None, use_cache: bool = False
 ) -> ScanResult:
     result = ScanResult(input_url=url)
+    url, normalize_note = _normalize_url(url)
+    if normalize_note:
+        result.scan_errors.append(normalize_note)
 
     try:
         hops = follow_redirects(url, client=client)
