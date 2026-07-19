@@ -98,6 +98,29 @@ file first, then falls back to env vars.
 If no keys are configured, `vetlnk` simply notes in the report that enhanced
 checks were unavailable — it is never an error.
 
+### Moving keys to another device
+
+Rather than re-pasting each API key on every new install, export your linked
+keys to a passphrase-encrypted file and import that file on the other device:
+
+```bash
+# On the device that already has keys linked:
+vetlnk config export keys.vlnk
+
+# Copy keys.vlnk to the other device by whatever means you like, then:
+vetlnk config import keys.vlnk
+```
+
+`export` prompts for a passphrase (minimum 8 characters, entered twice to
+catch typos) and encrypts the file with AES-256-GCM, using a scrypt-derived
+key so a stolen file is useless without the passphrase — which is never
+stored anywhere and can't be recovered if lost. `import` prompts for that
+same passphrase, then validates and stores each key exactly as if you'd
+pasted it in yourself, asking before overwriting anything already linked
+(`--force` skips that prompt). Unrecognized provider ids in the file (e.g.
+from a newer vetlnk version) are skipped with a warning rather than failing
+the whole import.
+
 ## Detonation mode (opt-in)
 
 ```bash

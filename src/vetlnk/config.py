@@ -1,5 +1,6 @@
 """API key storage (OS keychain via `keyring`, with a permission-locked TOML
-fallback) and the `vetlnk config` interactive menu.
+fallback) and the `vetlnk config` interactive menu, plus encrypted export/import
+of stored keys for moving them to another device.
 
 VirusTotal and urlscan.io have no OAuth/device-code login for third-party CLIs,
 so this never fakes a login flow — it only stores a key you paste in yourself,
@@ -27,11 +28,13 @@ try:
 except ModuleNotFoundError:  # Python < 3.11
     import tomli as tomllib
 
+from vetlnk import keyfile
 from vetlnk.providers.base import REGISTRY
 
 _SERVICE_NAME = "vetlnk"
 _CONFIG_DIR = Path(os.environ.get("VETLNK_CONFIG_DIR", Path.home() / ".config" / "vetlnk"))
 _CONFIG_FILE = _CONFIG_DIR / "config.toml"
+_MIN_PASSPHRASE_LEN = 8
 
 
 @dataclass
@@ -122,6 +125,30 @@ def get_status(provider_id: str) -> ProviderStatus:
     )
 
 
+def export_keys() -> dict[str, str]:
+    """All currently-linked keys, keyed by provider id, for encrypted export."""
+    keys = {}
+    for provider in REGISTRY.values():
+        key = get_key(provider.id)
+        if key:
+            keys[provider.id] = key
+    return keys
+
+
+def apply_imported_key(provider_id: str, key: str) -> tuple[bool, str]:
+    """Validate and store one imported key. Returns (ok, message-or-backend)."""
+    provider = REGISTRY.get(provider_id)
+    if provider is None:
+        return False, f"Unknown provider '{provider_id}' — skipped."
+
+    is_valid, message = provider.validate(key)
+    if not is_valid:
+        return False, message
+
+    backend = store_key(provider_id, key)
+    return True, backend
+
+
 def run_config_menu(console: Console) -> None:
     import questionary
 
@@ -204,8 +231,91 @@ def _configure_provider(console: Console, provider) -> None:
 
 
 def register(app: typer.Typer) -> None:
-    @app.command("config")
-    def config_command() -> None:
-        """Interactively link/unlink VirusTotal and urlscan.io API keys."""
+    config_app = typer.Typer(
+        help="Link/unlink VirusTotal and urlscan.io API keys, or export/import "
+        "them as an encrypted file to move to another device.",
+        invoke_without_command=True,
+    )
+
+    @config_app.callback()
+    def config_default(ctx: typer.Context) -> None:
+        if ctx.invoked_subcommand is None:
+            run_config_menu(Console())
+
+    @config_app.command("export")
+    def export_cmd(
+        path: str = typer.Argument(..., help="Output path for the encrypted key file."),
+    ) -> None:
+        """Export all linked API keys to a passphrase-encrypted file."""
         console = Console()
-        run_config_menu(console)
+        keys = export_keys()
+        if not keys:
+            console.print("[yellow]No keys are currently linked — nothing to export.[/yellow]")
+            raise typer.Exit(code=1)
+
+        names = ", ".join(REGISTRY[pid].display_name for pid in keys)
+        console.print(f"Exporting {len(keys)} linked key(s): {names}")
+
+        passphrase = typer.prompt(
+            "Set a passphrase to encrypt the export", hide_input=True, confirmation_prompt=True
+        )
+        if len(passphrase) < _MIN_PASSPHRASE_LEN:
+            console.print(
+                f"[red]Passphrase must be at least {_MIN_PASSPHRASE_LEN} characters.[/red]"
+            )
+            raise typer.Exit(code=1)
+
+        data = keyfile.encrypt_export(keys, passphrase)
+        out_path = Path(path)
+        out_path.write_bytes(data)
+        out_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        console.print(
+            f"[green]Wrote encrypted key file to {out_path}.[/green] "
+            "Keep the passphrase safe — it can't be recovered."
+        )
+
+    @config_app.command("import")
+    def import_cmd(
+        path: str = typer.Argument(..., help="Encrypted key file from `vetlnk config export`."),
+        force: bool = typer.Option(
+            False, "--force", help="Overwrite already-linked keys without prompting."
+        ),
+    ) -> None:
+        """Import API keys from a file produced by `vetlnk config export`."""
+        console = Console()
+        in_path = Path(path)
+        try:
+            data = in_path.read_bytes()
+        except OSError as exc:
+            console.print(f"[red]Could not read {in_path}: {exc}[/red]")
+            raise typer.Exit(code=1) from exc
+
+        passphrase = typer.prompt("Passphrase for this key file", hide_input=True)
+        try:
+            keys = keyfile.decrypt_import(data, passphrase)
+        except keyfile.KeyFileError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
+
+        for provider_id, key in keys.items():
+            provider = REGISTRY.get(provider_id)
+            if provider is None:
+                console.print(f"[yellow]Unknown provider '{provider_id}' — skipped.[/yellow]")
+                continue
+
+            if get_status(provider_id).linked and not force:
+                overwrite = typer.confirm(
+                    f"{provider.display_name} already has a linked key here — overwrite?",
+                    default=False,
+                )
+                if not overwrite:
+                    console.print(f"[dim]Skipped {provider.display_name}.[/dim]")
+                    continue
+
+            ok, result = apply_imported_key(provider_id, key)
+            if ok:
+                console.print(f"[green]{provider.display_name}: stored via {result}.[/green]")
+            else:
+                console.print(f"[red]{provider.display_name}: {result} — not imported.[/red]")
+
+    app.add_typer(config_app, name="config")
