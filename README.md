@@ -152,9 +152,12 @@ priority order and never falls back to running the file locally:
    sandbox verdict. Execution happens on VirusTotal's infrastructure, not
    locally.
 2. **Docker available** — run static-only analysis (file-type via libmagic,
-   entropy, strings, a small starter YARA ruleset) inside an ephemeral
-   container hardened as follows — see [Verifying detonation
-   mode](#verifying-detonation-mode) below to confirm all of this yourself:
+   entropy, strings, a small starter YARA ruleset covering packed/high-entropy
+   PEs, process-injection API combos, PowerShell download cradles, LOLBin
+   abuse, Office macro auto-exec, ELF reverse shells, ransom-note strings, and
+   base64-obfuscated scripts) inside an ephemeral container hardened as
+   follows — see [Verifying detonation mode](#verifying-detonation-mode)
+   below to confirm all of this yourself:
    - `--network none` (no egress, no DNS)
    - non-root, unprivileged user (uid 10001), `--cap-drop ALL`,
      `no-new-privileges`
@@ -166,8 +169,27 @@ priority order and never falls back to running the file locally:
      coreutils' `timeout`), so a hung analysis is bounded even if the
      `vetlnk` process itself dies mid-run — combined with Docker's daemon-side
      `--rm`, the container cleans itself up independent of the host process
+   - a content hash of the ruleset/Dockerfile is stamped onto the built
+     image, so upgrading vetlnk with improved rules rebuilds the image
+     automatically instead of silently reusing a stale one
 3. **Neither available** — `vetlnk` refuses immediately and tells you exactly
    why, rather than attempting any fallback that risks local execution.
+
+**No API key, and no pre-installed Docker, are required.** If Docker itself
+isn't ready, vetlnk asks before touching anything:
+
+```
+Detonation requires the following dependencies not on your system:
+  - Docker daemon (not running)
+Install and run? [y/N]:
+```
+
+Answering `y` installs/starts Docker via your distro's package manager and
+systemd (this needs `sudo` — you'll get the normal password prompt) and adds
+you to the `docker` group for next time. This is **Linux-only**: macOS/Windows
+use Docker Desktop, which needs a GUI first run, so there vetlnk just tells
+you what to install instead of attempting it. Answering `n` cancels
+detonation for that file; the rest of the scan still completes normally.
 
 Any file downloaded for detonation is securely deleted (overwritten, then
 unlinked) as soon as analysis finishes — or as soon as an ordinary `kill` or

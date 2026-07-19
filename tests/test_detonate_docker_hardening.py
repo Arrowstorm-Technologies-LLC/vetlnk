@@ -41,9 +41,31 @@ class _FakeContainers:
         return self._lingering
 
 
+class _FakeImage:
+    def __init__(self, labels=None):
+        self.labels = labels or {}
+
+
+class _FakeImages:
+    def __init__(self, existing=None):
+        self._existing = existing  # a _FakeImage, or None if no image is cached yet
+        self.build_calls = []
+
+    def get(self, tag):
+        if self._existing is None:
+            raise Exception("no such image")  # noqa: TRY002 - stands in for docker.errors.ImageNotFound
+        return self._existing
+
+    def build(self, **kwargs):
+        self.build_calls.append(kwargs)
+        self._existing = _FakeImage(labels=kwargs.get("labels", {}))
+        return (self._existing, iter([]))
+
+
 class _FakeClient:
-    def __init__(self, **container_kwargs):
+    def __init__(self, images_kwargs=None, **container_kwargs):
         self.containers = _FakeContainers(**container_kwargs)
+        self.images = _FakeImages(**(images_kwargs or {}))
 
 
 def test_docker_run_uses_hardened_isolation_flags(tmp_path):
@@ -160,6 +182,82 @@ def test_dockerfile_declares_a_non_root_user():
         dockerfile_text = (path / "Dockerfile").read_text()
     assert "USER 10001:10001" in dockerfile_text
     assert "10001" in dockerfile_text
+
+
+def test_compute_build_hash_changes_when_content_changes(tmp_path):
+    (tmp_path / "rules").mkdir()
+    (tmp_path / "Dockerfile").write_text("FROM a\n")
+    (tmp_path / "rules" / "starter.yar").write_text("rule A { condition: true }")
+
+    original = detonate._compute_build_hash(tmp_path)
+    unchanged = detonate._compute_build_hash(tmp_path)
+    assert original == unchanged, "hash must be deterministic for unchanged content"
+
+    (tmp_path / "rules" / "starter.yar").write_text(
+        "rule A { condition: true }\nrule B { condition: true }"
+    )
+    changed = detonate._compute_build_hash(tmp_path)
+    assert changed != original, "hash must change when rule content changes"
+
+
+def test_ensure_analyzer_image_skips_build_when_hash_matches(monkeypatch):
+    monkeypatch.setattr(detonate, "_compute_build_hash", lambda build_dir: "abc123")
+    client = _FakeClient(
+        images_kwargs={"existing": _FakeImage(labels={detonate._BUILD_HASH_LABEL: "abc123"})}
+    )
+
+    assert detonate._ensure_analyzer_image(client) is True
+    assert client.images.build_calls == []
+
+
+def test_ensure_analyzer_image_rebuilds_when_hash_differs(monkeypatch):
+    monkeypatch.setattr(detonate, "_compute_build_hash", lambda build_dir: "new-hash")
+    client = _FakeClient(
+        images_kwargs={"existing": _FakeImage(labels={detonate._BUILD_HASH_LABEL: "old-hash"})}
+    )
+
+    assert detonate._ensure_analyzer_image(client) is True
+    assert len(client.images.build_calls) == 1
+    assert client.images.build_calls[0]["labels"] == {detonate._BUILD_HASH_LABEL: "new-hash"}
+
+
+def test_ensure_analyzer_image_builds_when_no_image_yet(monkeypatch):
+    monkeypatch.setattr(detonate, "_compute_build_hash", lambda build_dir: "new-hash")
+    client = _FakeClient(images_kwargs={"existing": None})
+
+    assert detonate._ensure_analyzer_image(client) is True
+    assert len(client.images.build_calls) == 1
+
+
+def test_starter_ruleset_covers_expected_indicators_and_dropped_the_weak_rule():
+    """Structural check only — no `yara` import here on purpose. Host code
+    never parses untrusted bytes with YARA/libmagic; only the isolated
+    container does (see the `dev` extra's comment in pyproject.toml and
+    analyze.py's docstring). The ruleset itself was validated by compiling
+    and test-matching it with yara-python in a throwaway venv outside the
+    repo, not via an automated host-side test.
+    """
+    with detonate._analyzer_build_context() as path:
+        rules_text = (path / "rules" / "starter.yar").read_text()
+
+    for expected_rule in (
+        "Suspicious_PE_High_Entropy",
+        "Suspicious_PE_Process_Injection_APIs",
+        "Embedded_PowerShell_Download_Cradle",
+        "LOLBin_Download_And_Execute",
+        "Office_Macro_Auto_Exec",
+        "ELF_Reverse_Shell_Indicators",
+        "Ransom_Note_Indicators",
+        "Obfuscated_Script_Base64_Payload",
+    ):
+        assert f"rule {expected_rule}" in rules_text
+
+    # Old "Double_Extension_Script" rule dropped: it checked for a shebang at
+    # offset 0 but never actually looked at the filename despite its name;
+    # that's already covered properly by filetype.py.
+    assert "rule Double_Extension_Script" not in rules_text
+    assert 'import "math"' in rules_text
+    assert 'import "pe"' in rules_text
 
 
 @pytest.mark.parametrize("bad_run_id", ["", "not-a-real-id"])

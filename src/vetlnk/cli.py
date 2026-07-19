@@ -98,8 +98,11 @@ def scan(
             # still live would fight it for the terminal.
             if _should_detonate(console, result, detonate):
                 if result.file_info:
-                    with console.status("Attempting detonation..."):
-                        result.detonation = run_detonation(result)
+                    # No spinner here: run_detonation() may itself prompt (to
+                    # install/start Docker, or for a sudo password), and a live
+                    # Rich status display fights a real terminal prompt for output.
+                    console.print("[dim]Attempting detonation...[/dim]")
+                    result.detonation = run_detonation(result)
                 else:
                     result.scan_errors.append(
                         "-d/--detonate requested but no downloadable file was found."

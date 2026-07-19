@@ -32,7 +32,7 @@ jobs:
 
       - name: Install project and PyInstaller
         run: |
-          pip install .
+          pip install ".[detonate]"
           pip install pyinstaller
 
       - name: Build standalone binary

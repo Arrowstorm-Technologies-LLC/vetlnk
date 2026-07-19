@@ -5,6 +5,42 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-07-19
+
+### Added
+
+- Detonation no longer requires an API key or pre-installed Docker: if
+  Docker isn't ready, `vetlnk` now asks before doing anything about it
+  ("Detonation requires the following dependencies not on your system.
+  Install and run? [y/N]") and, on Linux, installs and starts it via the
+  native package manager + systemd, falling back to `sudo docker` for that
+  same run since a fresh `docker` group membership needs a new login to
+  take effect. macOS/Windows (Docker Desktop, needs a GUI first-run) get a
+  clear manual-install message instead of a fragile auto-install attempt.
+- Expanded the detonation-mode starter YARA ruleset from 4 narrow rules to
+  8: packed/high-entropy PEs, classic process-injection API combos,
+  PowerShell download cradles, LOLBin abuse, Office macro auto-exec, ELF
+  reverse-shell indicators, ransom-note strings, and base64-obfuscated
+  scripts. Dropped a rule that claimed to check file extensions but never
+  actually did.
+- The analyzer image is now rebuilt automatically when the bundled
+  Dockerfile/rules change, via a content-hash label — previously a cached
+  image from an older vetlnk version would silently keep running outdated
+  detection logic forever.
+- `docker run` failures during static analysis now surface the container's
+  actual stderr instead of a generic "produced no result" message.
+
+### Fixed
+
+- The downloaded sample's temp directory is now made readable by the
+  analyzer container's fixed non-root uid — previously `tempfile.mkdtemp()`'s
+  default owner-only permissions silently made every static-analysis run
+  fail with a permission error once bind-mounted into the container.
+- Release binaries now bundle the `docker` Python package (`pip install
+  ".[detonate]"` in the release workflow) — previously `-d` could never
+  work on an official release build regardless of what was installed on
+  the host machine.
+
 ## [0.4.0] - 2026-07-19
 
 ### Added
