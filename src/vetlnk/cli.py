@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import signal
+import sys
 
 import httpx
 import typer
@@ -19,6 +20,28 @@ from vetlnk.scanner import scan_url
 
 def _raise_keyboard_interrupt(signum, frame):
     raise KeyboardInterrupt()
+
+
+def _should_detonate(console: Console, result: ScanResult, detonate_flag: bool) -> bool:
+    """Whether to detonate this result's file: always if -d/--detonate was passed,
+    otherwise ask interactively when a file was found and a human is at the
+    terminal. In a non-interactive context (no tty) a bare prompt would just
+    hang, so this skips it and leaves the file undetonated instead.
+    """
+    if detonate_flag:
+        return True
+    if not result.file_info:
+        return False
+    if not sys.stdin.isatty():
+        result.scan_errors.append(
+            "File detected but not running interactively — skipped the detonation "
+            "prompt (pass -d/--detonate to force it)."
+        )
+        return False
+
+    label = result.file_info.declared_filename or "unnamed file"
+    console.print(f"[yellow]File detected:[/yellow] {label}")
+    return typer.confirm("Detonate?", default=False)
 
 
 # Plain `kill <pid>` sends SIGTERM, which — unlike Ctrl+C's SIGINT — Python
@@ -71,16 +94,18 @@ def scan(
                 result = scan_url(url, client=client, use_cache=cache_iocs)
                 run_enhanced_checks(result, use_cache=cache_iocs)
 
-                if detonate:
-                    if result.file_info:
-                        with console.status("Attempting detonation..."):
-                            result.detonation = run_detonation(result)
-                    else:
-                        result.scan_errors.append(
-                            "-d/--detonate requested but no downloadable file was found."
-                        )
+            # Outside the spinner: a detonation prompt while the status spinner is
+            # still live would fight it for the terminal.
+            if _should_detonate(console, result, detonate):
+                if result.file_info:
+                    with console.status("Attempting detonation..."):
+                        result.detonation = run_detonation(result)
+                else:
+                    result.scan_errors.append(
+                        "-d/--detonate requested but no downloadable file was found."
+                    )
 
-                synthesize_risk(result)
+            synthesize_risk(result)
             results.append(result)
             report.render_terminal(result, console)
             console.print()

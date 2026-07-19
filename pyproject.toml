@@ -1,6 +1,6 @@
 [project]
 name = "vetlnk"
-version = "0.3.0"
+version = "0.4.0"
 description = "A fast, zero-friction command-line link-vetting tool for checking a suspicious link before clicking it"
 readme = "README.md"
 requires-python = ">=3.12"

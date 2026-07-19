@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-07-19
+
+### Added
+
+- `vetlnk scan` now prompts interactively — `File detected: <name>. Detonate?
+  [y/N]` — when a downloadable file is found and `-d`/`--detonate` wasn't
+  passed, instead of requiring the flag to be known upfront. Answering `n`
+  (or skipping the prompt in a non-interactive context) finishes the scan
+  with the same report as a plain scan. `-d`/`--detonate` still detonates
+  immediately with no prompt, for scripts and CI.
+
 ## [0.3.0] - 2026-07-19
 
 ### Added

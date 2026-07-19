@@ -127,9 +127,25 @@ the whole import.
 vetlnk scan <url> -d
 ```
 
-Only triggers if the default scan found a downloadable file. `vetlnk` picks a
-backend in this priority order and never falls back to running the file
-locally:
+Only triggers if the default scan found a downloadable file. You don't have
+to know that in advance, though — if you run `vetlnk scan <url>` without
+`-d` and the scan finds a downloadable file, you'll be asked right there:
+
+```
+File detected: payload.exe
+Detonate? [y/N]:
+```
+
+Answer `y` to go straight into detonation for that file, or `n` (or just
+Enter) to finish the scan and print the same report you'd get from a plain
+scan. `-d`/`--detonate` still works as before and skips this prompt entirely
+(detonating immediately) — handy for scripts and CI where nothing is there
+to answer it. In a non-interactive context (no attached terminal), the
+prompt is skipped automatically rather than hanging, and the report notes
+that a file was found but not detonated.
+
+Whichever way detonation gets triggered, `vetlnk` picks a backend in this
+priority order and never falls back to running the file locally:
 
 1. **`VT_API_KEY` configured** — download the file, hash it, and submit the
    hash (or the file itself, if the hash is unknown to VirusTotal) for their
